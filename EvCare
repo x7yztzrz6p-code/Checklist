@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EV CARE – Vehicle Inbound / Outbound Inspection</title>
+
+<!-- Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+
+<style>
+body{font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;}
+.container{max-width:900px;margin:auto;background:#fff;padding:20px;border-radius:10px;box-shadow:0 0 8px #aaa;}
+h1{text-align:center;color:#00796b;}
+label{display:block;margin-top:10px;font-weight:bold;}
+input,select,textarea{width:100%;padding:6px;margin-top:4px;border:1px solid #ccc;border-radius:4px;}
+textarea{resize:vertical;}
+.flex{display:flex;flex-wrap:wrap;gap:10px;}
+.flex-item{flex:1;min-width:180px;}
+button{background:#00796b;color:#fff;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;margin:10px 5px;}
+button:hover{background:#004d40;}
+.preview{width:100%;max-height:150px;object-fit:cover;margin-top:5px;border:1px solid #ccc;}
+canvas{border:1px dashed #777;width:100%;height:100px;border-radius:5px;touch-action:none;}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h1>EV CARE – Vehicle Inbound / Outbound Inspection</h1>
+
+  <label>Inspection Type</label>
+  <select id="type">
+    <option>Inbound (Receiving)</option>
+    <option>Outbound (Hand-Over)</option>
+  </select>
+
+  <div class="flex">
+    <div class="flex-item"><label>Customer Name</label><input id="custName" type="text"></div>
+    <div class="flex-item"><label>Phone Number</label><input id="custPhone" type="text"></div>
+  </div>
+
+  <div class="flex">
+    <div class="flex-item"><label>Vehicle Make / Model</label><input id="vehicle" type="text"></div>
+    <div class="flex-item"><label>Plate Number</label><input id="plate" type="text"></div>
+  </div>
+
+  <h3>Photo Documentation</h3>
+  <div class="flex">
+    <div class="flex-item"><label>Front Side</label><input type="file" accept="image/*" onchange="previewImage(this,'frontImg')"><img id="frontImg" class="preview"></div>
+    <div class="flex-item"><label>Rear Side</label><input type="file" accept="image/*" onchange="previewImage(this,'rearImg')"><img id="rearImg" class="preview"></div>
+  </div>
+  <div class="flex">
+    <div class="flex-item"><label>Left Side</label><input type="file" accept="image/*" onchange="previewImage(this,'leftImg')"><img id="leftImg" class="preview"></div>
+    <div class="flex-item"><label>Right Side</label><input type="file" accept="image/*" onchange="previewImage(this,'rightImg')"><img id="rightImg" class="preview"></div>
+  </div>
+
+  <h3>Additional Photos (Optional)</h3>
+  <div class="flex">
+    <div class="flex-item"><label>Extra Photo 1</label><input type="file" accept="image/*" onchange="previewImage(this,'extra1')"><img id="extra1" class="preview"></div>
+    <div class="flex-item"><label>Extra Photo 2</label><input type="file" accept="image/*" onchange="previewImage(this,'extra2')"><img id="extra2" class="preview"></div>
+  </div>
+  <div class="flex">
+    <div class="flex-item"><label>Extra Photo 3</label><input type="file" accept="image/*" onchange="previewImage(this,'extra3')"><img id="extra3" class="preview"></div>
+    <div class="flex-item"><label>Extra Photo 4</label><input type="file" accept="image/*" onchange="previewImage(this,'extra4')"><img id="extra4" class="preview"></div>
+  </div>
+
+  <h3>Notes / Additional Remarks</h3>
+  <textarea id="notes" rows="5" placeholder="Write any additional notes, observations, or damage descriptions here..."></textarea>
+
+  <h3>Checklist</h3>
+  <label><input type="checkbox" id="keyReceived"> Key Received</label>
+  <label><input type="checkbox" id="regReceived"> Registration Card Received</label>
+
+  <h3>Signatures</h3>
+  <label>Customer Signature</label>
+  <canvas id="sigCustomer"></canvas>
+  <input type="text" id="custSigName" placeholder="Customer full name for signature">
+
+  <label>EV CARE Technician Signature</label>
+  <canvas id="sigTech"></canvas>
+  <input type="text" id="techSigName" placeholder="Technician full name for signature">
+
+  <button type="button" onclick="clearSig(customerPad)">Clear Customer</button>
+  <button type="button" onclick="clearSig(techPad)">Clear Technician</button>
+
+  <button onclick="generatePDF()">📄 Generate PDF</button>
+  <button onclick="sharePDF()">📱 Share / WhatsApp</button>
+</div>
+
+<script>
+function previewImage(input,id){
+  const file=input.files[0];
+  if(file){
+    const reader=new FileReader();
+    reader.onload=e=>document.getElementById(id).src=e.target.result;
+    reader.readAsDataURL(file);
+  }
+}
+
+/* Signatures */
+const customerPad=new SignaturePad(document.getElementById("sigCustomer"));
+const techPad=new SignaturePad(document.getElementById("sigTech"));
+function clearSig(pad){pad.clear();}
+
+/* Generate PDF and download (Edge-safe) */
+async function generatePDF(shareMode=false){
+  const { jsPDF }=window.jspdf;
+  const pdf=new jsPDF("p","mm","a4");
+  const pageHeight=pdf.internal.pageSize.getHeight();
+  const pageWidth=pdf.internal.pageSize.getWidth();
+  const now=new Date();
+  const reportDate=now.toLocaleDateString();
+  const timestamp=now.toLocaleString();
+  let y=25,page=1;
+
+  function footer(){
+    pdf.setFontSize(10);
+    pdf.text(`Page ${page}`,pageWidth-30,pageHeight-10);
+  }
+  function addText(label,value){
+    pdf.setFontSize(12);
+    pdf.text(`${label}: ${value||""}`,10,y);
+    y+=8;
+  }
+
+  pdf.setFontSize(16);
+  pdf.text("EV CARE – Vehicle Inbound / Outbound Inspection",10,y);
+  pdf.setFontSize(11);
+  pdf.text(`Report Date: ${reportDate}`,pageWidth-70, y);
+  y+=12;
+
+  addText("Inspection Type",document.getElementById("type").value);
+  addText("Customer Name",document.getElementById("custName").value);
+  addText("Phone",document.getElementById("custPhone").value);
+  addText("Vehicle",document.getElementById("vehicle").value);
+  addText("Plate Number",document.getElementById("plate").value);
+  y+=6;
+
+  pdf.text("Notes / Additional Remarks:",10,y);
+  y+=6;
+  const notes=document.getElementById("notes").value||"-";
+  const splitNotes=pdf.splitTextToSize(notes,180);
+  pdf.text(splitNotes,10,y);
+  y+=splitNotes.length*6+8;
+  if(y>pageHeight-50){footer();pdf.addPage();y=20;page++;}
+
+  const key=document.getElementById("keyReceived").checked?"Yes":"No";
+  const reg=document.getElementById("regReceived").checked?"Yes":"No";
+  addText("Key Received",key);
+  addText("Registration Card Received",reg);
+  y+=10;
+
+  const imageIds=["frontImg","rearImg","leftImg","rightImg","extra1","extra2","extra3","extra4"];
+  for(let id of imageIds){
+    const img=document.getElementById(id);
+    if(img && img.src && img.src.startsWith("data:image")){
+      if(y>pageHeight-70){footer();pdf.addPage();y=20;page++;}
+      pdf.text(id.replace("Img","").toUpperCase(),10,y);
+      y+=4;
+      pdf.addImage(img.src,"JPEG",10,y,90,60);
+      y+=65;
+    }
+  }
+
+  if(y>pageHeight-70){footer();pdf.addPage();y=20;page++;}
+  pdf.text("Customer Signature:",10,y);
+  y+=4;
+  if(!customerPad.isEmpty()) pdf.addImage(customerPad.toDataURL(),"PNG",10,y,60,30);
+  y+=35;
+  pdf.text(`Name: ${document.getElementById("custSigName").value||""}`,10,y);
+  y+=6;
+  pdf.text(`Timestamp: ${timestamp}`,10,y);
+  y+=12;
+
+  if(y>pageHeight-60){footer();pdf.addPage();y=20;page++;}
+  pdf.text("EV CARE Technician Signature:",10,y);
+  y+=4;
+  if(!techPad.isEmpty()) pdf.addImage(techPad.toDataURL(),"PNG",10,y,60,30);
+  y+=35;
+  pdf.text(`Name: ${document.getElementById("techSigName").value||""}`,10,y);
+  y+=6;
+  pdf.text(`Timestamp: ${timestamp}`,10,y);
+
+  footer();
+
+  const custName=document.getElementById("custName").value.replace(/\s+/g,"_")||"Customer";
+  const plate=document.getElementById("plate").value.replace(/\s+/g,"_")||"NoPlate";
+  const fileName=`EVCARE_${plate}_${custName}.pdf`;
+
+  /* Blob save (Edge-safe) */
+  const pdfBlob=pdf.output("blob");
+  const blobUrl=URL.createObjectURL(pdfBlob);
+
+  if(shareMode && navigator.share){
+    const file=new File([pdfBlob],fileName,{type:"application/pdf"});
+    try{
+      await navigator.share({
+        title:"EV CARE Inspection Report",
+        text:"Vehicle inspection report attached.",
+        files:[file]
+      });
+    }catch(err){console.error(err);}
+  }else{
+    const a=document.createElement("a");
+    a.href=blobUrl;
+    a.download=fileName;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
+    alert("✅ PDF generated successfully as "+fileName);
+  }
+}
+
+/* Share via WhatsApp / native share */
+function sharePDF(){generatePDF(true);}
+</script>
+</body>
+</html>
